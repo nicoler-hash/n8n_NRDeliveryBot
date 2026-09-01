@@ -1,0 +1,260 @@
+{
+  "name": "DeliveryBot - 7 - Reporte Diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * *"
+            }
+          ]
+        }
+      },
+      "id": "ae4ae188-9ada-4296-8353-f40c9fda63cc",
+      "name": "Cron Diario 9pm",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1_FvCDtC_gMiJQvS1tkLP6XWTYoJKTTHWoyL9ZLvOXoE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PEDIDOS",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "73de0e92-023e-413c-8746-82eb584177d5",
+      "name": "Leer Pedidos del Dia",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "y8Z3jrnZtrJWidBg",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst hoy = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst filas = $('Leer Pedidos del Dia').all().map(i => i.json).filter(p => p.fecha === hoy);\nlet totalVendido = 0;\nconst conteoProductos = {};\nconst conteoHoras = {};\nfor (const p of filas) {\n  totalVendido += Number(p.total_pago) || 0;\n  const hora = (p.hora || '00:00:00').split(':')[0] + ':00';\n  conteoHoras[hora] = (conteoHoras[hora] || 0) + 1;\n  let items = [];\n  try { items = JSON.parse(p.detalles_pedido); } catch (e) { items = []; }\n  for (const it of items) {\n    conteoProductos[it.nombre] = (conteoProductos[it.nombre] || 0) + Number(it.cantidad || 0);\n  }\n}\nconst productoEstrella = Object.entries(conteoProductos).sort((a, b) => b[1] - a[1])[0];\nconst horaPico = Object.entries(conteoHoras).sort((a, b) => b[1] - a[1])[0];\nconst resumen = {\n  fecha: hoy,\n  pedidos_totales: filas.length,\n  total_vendido: totalVendido,\n  producto_estrella: productoEstrella ? productoEstrella[0] : 'N/A',\n  hora_pico: horaPico ? horaPico[0] : 'N/A'\n};\nconst mensaje = `REPORTE DIARIO DeliveryBot - ${hoy}\\nPedidos totales: ${resumen.pedidos_totales}\\nTotal vendido: $${totalVendido.toFixed(2)}\\nProducto estrella: ${resumen.producto_estrella}\\nHora pico: ${resumen.hora_pico}`;\nreturn [{ json: { ...resumen, mensaje } }];"
+      },
+      "id": "2cab4d6d-377b-4efe-93ab-d65efec740be",
+      "name": "Calcular Metricas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1_FvCDtC_gMiJQvS1tkLP6XWTYoJKTTHWoyL9ZLvOXoE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "REPORTES",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha": "={{ $json.fecha }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id_pedido",
+              "displayName": "id_pedido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id_usuario",
+              "displayName": "id_usuario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "detalles_pedido",
+              "displayName": "detalles_pedido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_pago",
+              "displayName": "total_pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fecha",
+              "displayName": "fecha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hora",
+              "displayName": "hora",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "aadc86c1-4f9b-44ee-b5b3-7dd7de935d9f",
+      "name": "Guardar en REPORTES",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "y8Z3jrnZtrJWidBg",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5249898964",
+        "text": "={{ $('Calcular Metricas').item.json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "8c100a19-a38c-4761-8972-bf9bce441c90",
+      "name": "Enviar Reporte a Admin",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        0
+      ],
+      "webhookId": "56bb4e7a-573c-4cb6-a5eb-f9547372cabf",
+      "credentials": {
+        "telegramApi": {
+          "id": "QFtZZ2mrpzGE57zM",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron Diario 9pm": {
+      "main": [
+        [
+          {
+            "node": "Leer Pedidos del Dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Pedidos del Dia": {
+      "main": [
+        [
+          {
+            "node": "Calcular Metricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Metricas": {
+      "main": [
+        [
+          {
+            "node": "Guardar en REPORTES",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en REPORTES": {
+      "main": [
+        [
+          {
+            "node": "Enviar Reporte a Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d5311fb1-0cae-4373-b64f-adc31706d053",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "560f52a9d84e3c84e0bb4b4858f654a4bdad635875f77ad037d2ce8631bd6ad7"
+  },
+  "nodeGroups": [],
+  "id": "36h0TytC7IDG0qNS",
+  "tags": []
+}

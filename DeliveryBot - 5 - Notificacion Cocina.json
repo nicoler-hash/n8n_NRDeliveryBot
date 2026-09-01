@@ -1,0 +1,116 @@
+{
+  "name": "DeliveryBot - 5 - Notificacion Cocina",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1_FvCDtC_gMiJQvS1tkLP6XWTYoJKTTHWoyL9ZLvOXoE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PEDIDOS",
+          "mode": "name"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "cab943c7-cdb4-407b-80e2-e91516792e39",
+      "name": "Nuevo Pedido en Sheets",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "ypORoDamlc7HgeSc",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nlet items = [];\ntry { items = JSON.parse(p.detalles_pedido); } catch (e) { items = []; }\nconst detalle = items.map(i => `- ${i.cantidad}x ${i.nombre}`).join('\\n') || p.detalles_pedido;\nconst mensaje = `NUEVO PEDIDO #${p.id_pedido}\\n${detalle}\\nTotal: $${p.total_pago}\\nHora: ${p.hora}\\n\\nCambia el estado en la hoja PEDIDOS cuando corresponda.`;\nreturn [{ json: { mensaje } }];"
+      },
+      "id": "a6939877-4563-430c-a302-8d9da2ca2e6b",
+      "name": "Formatear Notificacion Cocina",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "5249898964",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "9b46199f-98bc-4110-b3e8-9edcbe40f4a5",
+      "name": "Enviar a Cocina",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        0
+      ],
+      "webhookId": "21d85f44-f2e6-4782-9437-28fb9914c9e6",
+      "credentials": {
+        "telegramApi": {
+          "id": "QFtZZ2mrpzGE57zM",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Nuevo Pedido en Sheets": {
+      "main": [
+        [
+          {
+            "node": "Formatear Notificacion Cocina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Notificacion Cocina": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Cocina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9ff228c9-5276-4edc-9920-bfc30b6fbda0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "560f52a9d84e3c84e0bb4b4858f654a4bdad635875f77ad037d2ce8631bd6ad7"
+  },
+  "nodeGroups": [],
+  "id": "WlfF1jtIQISj0rUE",
+  "tags": []
+}

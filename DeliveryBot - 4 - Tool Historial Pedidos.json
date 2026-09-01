@@ -1,0 +1,99 @@
+{
+  "name": "DeliveryBot - 4 - Tool Historial Pedidos",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "622d5b01-f131-4053-8e83-0681a6a67e34",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        688,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1_FvCDtC_gMiJQvS1tkLP6XWTYoJKTTHWoyL9ZLvOXoE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PEDIDOS",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "ae4d89c5-9422-4ec6-a56e-4d5b9f011495",
+      "name": "Leer Pedidos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        912,
+        -288
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "y8Z3jrnZtrJWidBg",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const telegramId = String($input.first().json.telegram_id);\nconst filas = $('Leer Pedidos').all().map(i => i.json)\n  .filter(p => String(p.id_usuario) === telegramId)\n  .sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));\nif (filas.length === 0) {\n  return [{ json: { resultado: 'Todavia no tienes pedidos registrados.' } }];\n}\nconst ultimo = filas[0];\nconst recientes = filas.slice(0, 5).map(p => `#${p.id_pedido} - ${p.fecha} ${p.hora} - $${p.total_pago} - Estado: ${p.estado}`).join('\\n');\nconst resultado = `Tu pedido mas reciente (#${ultimo.id_pedido}) esta en estado: ${ultimo.estado}.\\n\\nUltimos pedidos:\\n${recientes}`;\nreturn [{ json: { resultado } }];"
+      },
+      "id": "2ad12a87-ae14-46bd-a1f3-5c9b31200876",
+      "name": "Formatear Historial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        -288
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Leer Pedidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Pedidos": {
+      "main": [
+        [
+          {
+            "node": "Formatear Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a35bb464-5115-4b26-9751-3e566a4f56a3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "560f52a9d84e3c84e0bb4b4858f654a4bdad635875f77ad037d2ce8631bd6ad7"
+  },
+  "nodeGroups": [],
+  "id": "7AL3OfCOevOXASLt",
+  "tags": []
+}
