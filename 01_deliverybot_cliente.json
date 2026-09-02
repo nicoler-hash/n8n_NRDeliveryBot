@@ -1,0 +1,311 @@
+{
+  "name": "DeliveryBot - 01 Cliente (Menú, Carrito y Pedidos)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "node-client-trigger",
+      "name": "Telegram Trigger Cliente",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "deliverybot-client-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cliente",
+          "name": "Telegram Client Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer datos entrantes de Telegram (Mensaje o Callback Query)\r\nconst item = $input.item.json;\r\nlet chatId, userId, firstName, username, text, callbackData, callbackQueryId;\r\n\r\nif (item.callback_query) {\r\n  chatId = item.callback_query.message.chat.id;\r\n  userId = item.callback_query.from.id;\r\n  firstName = item.callback_query.from.first_name || 'Cliente';\r\n  username = item.callback_query.from.username || '';\r\n  callbackData = item.callback_query.data || '';\r\n  callbackQueryId = item.callback_query.id;\r\n  text = '';\r\n} else if (item.message) {\r\n  chatId = item.message.chat.id;\r\n  userId = item.message.from.id;\r\n  firstName = item.message.from.first_name || 'Cliente';\r\n  username = item.message.from.username || '';\r\n  text = (item.message.text || '').trim();\r\n  callbackData = '';\r\n  callbackQueryId = null;\r\n}\r\n\r\nlet action = 'SHOW_MAIN_MENU';\r\nlet payload = {};\r\n\r\nif (text === '/start' || text.toLowerCase() === 'menu' || callbackData === 'cmd:menu') {\r\n  action = 'SHOW_MAIN_MENU';\r\n} else if (callbackData.startsWith('cat:')) {\r\n  action = 'SHOW_CATEGORY';\r\n  payload.categoria = callbackData.split(':')[1];\r\n} else if (callbackData.startsWith('prod:')) {\r\n  action = 'SHOW_PRODUCT';\r\n  payload.id_producto = callbackData.split(':')[1];\r\n} else if (callbackData.startsWith('add:')) {\r\n  action = 'ADD_TO_CART';\r\n  const parts = callbackData.split(':');\r\n  payload.id_producto = parts[1];\r\n  payload.cantidad = parseInt(parts[2] || '1', 10);\r\n} else if (callbackData === 'cart:view' || text === '/carrito') {\r\n  action = 'VIEW_CART';\r\n} else if (callbackData === 'cart:clear') {\r\n  action = 'CLEAR_CART';\r\n} else if (callbackData === 'cart:ask_address' || callbackData === 'cmd:address') {\r\n  action = 'ASK_ADDRESS';\r\n} else if (callbackData.startsWith('cart:set_address:')) {\r\n  action = 'SAVE_ADDRESS';\r\n  payload.direccion = callbackData.substring('cart:set_address:'.length).trim();\r\n} else if (/^\\/(direccion|ubicacion|piso)(\\s+.*)?$/i.test(text)) {\r\n  const parts = text.split(/\\s+/);\r\n  if (parts.length > 1) {\r\n    action = 'SAVE_ADDRESS';\r\n    payload.direccion = text.substring(parts[0].length).trim();\r\n  } else {\r\n    action = 'ASK_ADDRESS';\r\n  }\r\n} else if (callbackData === 'cart:confirm') {\r\n  action = 'CHECKOUT';\r\n} else if (callbackData === 'order:status' || text === '/estado') {\r\n  action = 'CHECK_STATUS';\r\n} else if (text === '/ayuda') {\r\n  action = 'SHOW_HELP';\r\n} else if (text.length > 0) {\r\n  action = 'HANDLE_TEXT';\r\n  payload.text = text;\r\n}\r\n\r\nreturn {\r\n  json: {\r\n    chatId,\r\n    userId,\r\n    firstName,\r\n    username,\r\n    action,\r\n    payload,\r\n    callbackQueryId,\r\n    rawText: text\r\n  }\r\n};"
+      },
+      "id": "node-client-router",
+      "name": "Router de Acciones Cliente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "MENU",
+        "options": {}
+      },
+      "id": "node-read-menu",
+      "name": "Leer Catálogo MENU",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        180
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "SESSIONS",
+        "options": {}
+      },
+      "id": "node-read-sessions",
+      "name": "Leer Sesión Carrito",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "PEDIDOS",
+        "options": {}
+      },
+      "id": "node-read-orders",
+      "name": "Leer Órdenes PEDIDOS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        460
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesador Central de Interfaz y Lógica de Negocio\r\nconst routerData = $('Router de Acciones Cliente').first().json;\r\nconst menuRows = $('Leer Catálogo MENU').all().map(i => i.json);\r\nconst sessionRows = $('Leer Sesión Carrito').all().map(i => i.json);\r\nconst orderRows = $('Leer Órdenes PEDIDOS').all().map(i => i.json);\r\n\r\nconst { action, chatId, userId, firstName, payload } = routerData;\r\n\r\nlet userSession = sessionRows.find(s => String(s.telegram_id) === String(userId));\r\nlet currentCart = [];\r\nlet currentAddress = '';\r\nlet currentScreen = 'MAIN_MENU';\r\n\r\nif (userSession) {\r\n  if (userSession.carrito_temporal) {\r\n    try {\r\n      currentCart = JSON.parse(userSession.carrito_temporal);\r\n    } catch (e) {\r\n      currentCart = [];\r\n    }\r\n  }\r\n  if (userSession.direccion) {\r\n    currentAddress = String(userSession.direccion).trim();\r\n  }\r\n  if (userSession.pantalla_actual) {\r\n    currentScreen = String(userSession.pantalla_actual).trim();\r\n  }\r\n}\r\n\r\n// Si la sesión no tiene dirección, intentar recuperar del último pedido del usuario\r\nif (!currentAddress) {\r\n  const userPastOrders = orderRows.filter(o => String(o.id_usuario) === String(userId) && o.direccion);\r\n  if (userPastOrders.length > 0) {\r\n    currentAddress = String(userPastOrders[userPastOrders.length - 1].direccion).trim();\r\n  }\r\n}\r\n\r\n// Si aún no hay dirección, buscar si existe en la hoja USUARIOS (si el nodo está disponible)\r\nif (!currentAddress) {\r\n  try {\r\n    const userRows = $('Leer Directorio USUARIOS').all().map(i => i.json);\r\n    const uProfile = userRows.find(u => String(u.telegram_id) === String(userId));\r\n    if (uProfile) {\r\n      currentAddress = String(uProfile.direccion || uProfile.departamento_oficina || '').trim();\r\n    }\r\n  } catch (e) {\r\n    // Si el nodo de usuarios no existe o no ha corrido, continuar de forma segura\r\n  }\r\n}\r\n\r\nlet responseMessage = '';\r\nlet inlineKeyboard = [];\r\nlet shouldUpdateSession = false;\r\nlet newCartState = currentCart;\r\nlet newScreenState = currentScreen;\r\nlet orderCreated = null;\r\nlet kitchenAlert = null;\r\n\r\nswitch (action) {\r\n  case 'SHOW_MAIN_MENU':\r\n    responseMessage = `👋 *¡Hola ${firstName}! Bienvenido a DeliveryBot Cafetería.*\\n\\n☕ Pide tus bebidas y comidas favoritas sin filas.\\n\\n👇 *Selecciona una categoría o consulta tu orden:*`;\r\n    inlineKeyboard = [\r\n      [\r\n        { text: '☕ Bebidas', callback_data: 'cat:Bebidas' },\r\n        { text: '🥪 Comidas', callback_data: 'cat:Comidas' }\r\n      ],\r\n      [\r\n        { text: '🍪 Snacks & Dulces', callback_data: 'cat:Snacks' }\r\n      ],\r\n      [\r\n        { text: `🛒 Ver Carrito (${currentCart.reduce((a, b) => a + b.cantidad, 0)})`, callback_data: 'cart:view' },\r\n        { text: '📍 Mis Pedidos', callback_data: 'order:status' }\r\n      ]\r\n    ];\r\n    break;\r\n\r\n  case 'SHOW_CATEGORY':\r\n    const cat = payload.categoria;\r\n    const prodsInCat = menuRows.filter(p => p.categoria === cat && parseInt(p.stock || '0', 10) > 0);\r\n    \r\n    responseMessage = `📋 *Menú: ${cat}*\\nSelecciona el producto que deseas agregar:`;\r\n    \r\n    inlineKeyboard = prodsInCat.map(p => [\r\n      {\r\n        text: `${p.nombre} - $${parseFloat(p.precio).toFixed(2)} (Stock: ${p.stock})`,\r\n        callback_data: `prod:${p.id_producto}`\r\n      }\r\n    ]);\r\n    \r\n    if (inlineKeyboard.length === 0) {\r\n      responseMessage = `⚠️ No hay productos disponibles en este momento en *${cat}*.`;\r\n    }\r\n    \r\n    inlineKeyboard.push([\r\n      { text: '🔙 Volver al Menú', callback_data: 'cmd:menu' },\r\n      { text: '🛒 Ver Carrito', callback_data: 'cart:view' }\r\n    ]);\r\n    break;\r\n\r\n  case 'SHOW_PRODUCT':\r\n    const prod = menuRows.find(p => p.id_producto === payload.id_producto);\r\n    if (!prod) {\r\n      responseMessage = '❌ Producto no encontrado o fuera de carta.';\r\n      inlineKeyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'cmd:menu' }]];\r\n    } else {\r\n      responseMessage = `🍴 *${prod.nombre}*\\n📝 ${prod.descripcion || 'Fresco y preparado al instante.'}\\n💵 *Precio:* $${parseFloat(prod.precio).toFixed(2)}\\n📦 *Stock disponible:* ${prod.stock} unidades\\n\\n¿Cuántas unidades deseas añadir?`;\r\n      \r\n      inlineKeyboard = [\r\n        [\r\n          { text: '+1', callback_data: `add:${prod.id_producto}:1` },\r\n          { text: '+2', callback_data: `add:${prod.id_producto}:2` },\r\n          { text: '+3', callback_data: `add:${prod.id_producto}:3` }\r\n        ],\r\n        [\r\n          { text: `🔙 Volver a ${prod.categoria}`, callback_data: `cat:${prod.categoria}` },\r\n          { text: '🛒 Ver Carrito', callback_data: 'cart:view' }\r\n        ]\r\n      ];\r\n    }\r\n    break;\r\n\r\n  case 'ADD_TO_CART':\r\n    const targetProd = menuRows.find(p => p.id_producto === payload.id_producto);\r\n    if (targetProd) {\r\n      const existingIndex = newCartState.findIndex(i => i.id_producto === targetProd.id_producto);\r\n      const qtyToAdd = payload.cantidad;\r\n      \r\n      if (existingIndex >= 0) {\r\n        newCartState[existingIndex].cantidad += qtyToAdd;\r\n      } else {\r\n        newCartState.push({\r\n          id_producto: targetProd.id_producto,\r\n          nombre: targetProd.nombre,\r\n          precio: parseFloat(targetProd.precio),\r\n          cantidad: qtyToAdd\r\n        });\r\n      }\r\n      shouldUpdateSession = true;\r\n      \r\n      const totalItems = newCartState.reduce((sum, item) => sum + item.cantidad, 0);\r\n      const cartTotal = newCartState.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);\r\n      \r\n      responseMessage = `✅ *¡Añadido al carrito!*\\n\\n➕ *${qtyToAdd}x ${targetProd.nombre}*\\n🛒 Total en carrito: *${totalItems} productos* ($${cartTotal.toFixed(2)}).\\n\\n¿Qué deseas hacer ahora?`;\r\n      \r\n      inlineKeyboard = [\r\n        [\r\n          { text: '🛒 Ver Carrito & Confirmar', callback_data: 'cart:view' },\r\n          { text: '➕ Seguir Pidiendo', callback_data: 'cmd:menu' }\r\n        ]\r\n      ];\r\n    }\r\n    break;\r\n\r\n  case 'VIEW_CART':\r\n    newScreenState = 'VIEW_CART';\r\n    if (currentCart.length === 0) {\r\n      responseMessage = '🛒 *Tu carrito está vacío.*\\n\\nExplora nuestro menú para agregar tus platillos y bebidas.';\r\n      inlineKeyboard = [\r\n        [{ text: '📋 Explorar Menú', callback_data: 'cmd:menu' }]\r\n      ];\r\n    } else {\r\n      let total = 0;\r\n      let itemsList = '';\r\n      \r\n      currentCart.forEach((item, index) => {\r\n        const subtotal = item.precio * item.cantidad;\r\n        total += subtotal;\r\n        itemsList += `${index + 1}. *${item.nombre}*\\n   ${item.cantidad} x $${item.precio.toFixed(2)} = *$${subtotal.toFixed(2)}*\\n`;\r\n      });\r\n      \r\n      const direccionTexto = currentAddress \r\n        ? `📍 *Dirección de entrega:* \\`${currentAddress}\\``\r\n        : '📍 *Dirección de entrega:* ⚠️ _Pendiente por indicar_';\r\n      \r\n      responseMessage = `🛒 *Resumen de tu Carrito:*\\n\\n${itemsList}\\n━━━━━━━━━━━━━━━━━━━\\n💰 *TOTAL A PAGAR: $${total.toFixed(2)}*\\n${direccionTexto}\\n\\n¿Deseas confirmar tu pedido y enviarlo a cocina?`;\r\n      \r\n      if (currentAddress) {\r\n        inlineKeyboard = [\r\n          [\r\n            { text: `✅ ¡Confirmar Pedido! ($${total.toFixed(2)})`, callback_data: 'cart:confirm' }\r\n          ],\r\n          [\r\n            { text: '✏️ Cambiar Dirección', callback_data: 'cart:ask_address' },\r\n            { text: '🗑️ Vaciar Carrito', callback_data: 'cart:clear' }\r\n          ],\r\n          [\r\n            { text: '➕ Agregar Más', callback_data: 'cmd:menu' }\r\n          ]\r\n        ];\r\n      } else {\r\n        inlineKeyboard = [\r\n          [\r\n            { text: '📍 Ingresar Dirección de Entrega', callback_data: 'cart:ask_address' }\r\n          ],\r\n          [\r\n            { text: '✅ Confirmar Pedido', callback_data: 'cart:confirm' },\r\n            { text: '🗑️ Vaciar Carrito', callback_data: 'cart:clear' }\r\n          ],\r\n          [\r\n            { text: '➕ Agregar Más', callback_data: 'cmd:menu' }\r\n          ]\r\n        ];\r\n      }\r\n    }\r\n    break;\r\n\r\n  case 'ASK_ADDRESS':\r\n    newScreenState = 'AWAITING_ADDRESS';\r\n    shouldUpdateSession = true;\r\n    const currentDirMsg = currentAddress ? `\\n\\n🏠 *Dirección actual registrada:* \\`${currentAddress}\\`` : '';\r\n    responseMessage = `📍 *Ingresa tu Dirección de Entrega*${currentDirMsg}\\n\\nPor favor, responde a este mensaje escribiendo tu **oficina, piso o dirección** donde recibirás tu pedido:\\n\\n_(Ejemplo: Piso 3 - Finanzas, Oficina 204 o Av. Central 45)_`;\r\n    \r\n    inlineKeyboard = [];\r\n    if (currentAddress) {\r\n      inlineKeyboard.push([\r\n        { text: `✅ Conservar \"${currentAddress}\"`, callback_data: `cart:set_address:${currentAddress}` }\r\n      ]);\r\n    }\r\n    inlineKeyboard.push([\r\n      { text: '🔙 Volver al Carrito', callback_data: 'cart:view' },\r\n      { text: '📋 Menú', callback_data: 'cmd:menu' }\r\n    ]);\r\n    break;\r\n\r\n  case 'SAVE_ADDRESS':\r\n    const dirToSave = (payload.direccion || '').trim();\r\n    if (dirToSave.length >= 3) {\r\n      currentAddress = dirToSave;\r\n      shouldUpdateSession = true;\r\n      newScreenState = 'VIEW_CART';\r\n      \r\n      if (currentCart.length > 0) {\r\n        const total = currentCart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);\r\n        responseMessage = `✅ *¡Dirección de entrega guardada!*\\n\\n🏠 *Destino:* \\`${currentAddress}\\`\\n🛒 Carrito: *${currentCart.length} productos* ($${total.toFixed(2)}).\\n\\n¿Deseas confirmar tu orden ahora?`;\r\n        inlineKeyboard = [\r\n          [{ text: '✅ ¡Confirmar Pedido Ahora!', callback_data: 'cart:confirm' }],\r\n          [{ text: '✏️ Modificar Dirección', callback_data: 'cart:ask_address' }],\r\n          [{ text: '🛒 Ver Carrito', callback_data: 'cart:view' }]\r\n        ];\r\n      } else {\r\n        responseMessage = `✅ *¡Dirección de entrega guardada!*\\n\\n🏠 *Destino guardado:* \\`${currentAddress}\\`\\n\\nQuedó registrada para tus próximos pedidos. Explora nuestro menú para ordenar:`;\r\n        inlineKeyboard = [\r\n          [{ text: '📋 Explorar Menú', callback_data: 'cmd:menu' }]\r\n        ];\r\n      }\r\n    } else {\r\n      responseMessage = `⚠️ La dirección ingresada es muy corta. Por favor escribe una dirección válida (mínimo 3 caracteres).`;\r\n      newScreenState = 'AWAITING_ADDRESS';\r\n      shouldUpdateSession = true;\r\n      inlineKeyboard = [\r\n        [{ text: '🔙 Volver al Carrito', callback_data: 'cart:view' }]\r\n      ];\r\n    }\r\n    break;\r\n\r\n  case 'HANDLE_TEXT':\r\n    const incomingText = (payload.text || '').trim();\r\n    // Si el usuario escribe texto libre, lo registramos como dirección si tiene al menos 3 caracteres\r\n    if (incomingText.length >= 3) {\r\n      currentAddress = incomingText;\r\n      shouldUpdateSession = true;\r\n      newScreenState = 'VIEW_CART';\r\n      \r\n      if (currentCart.length > 0) {\r\n        const total = currentCart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);\r\n        responseMessage = `📍 *¡Dirección de entrega registrada con éxito!*\\n\\n🏠 *Destino:* \\`${currentAddress}\\`\\n💰 *Total a pagar:* *$${total.toFixed(2)}*\\n\\n¿Deseas confirmar tu orden y enviarla a preparación?`;\r\n        inlineKeyboard = [\r\n          [{ text: '✅ ¡Confirmar Pedido Ahora!', callback_data: 'cart:confirm' }],\r\n          [{ text: '✏️ Cambiar Dirección', callback_data: 'cart:ask_address' }],\r\n          [{ text: '🛒 Ver Carrito', callback_data: 'cart:view' }]\r\n        ];\r\n      } else {\r\n        responseMessage = `📍 *¡Dirección de entrega registrada con éxito!*\\n\\n🏠 *Destino guardado:* \\`${currentAddress}\\`\\n\\nTu dirección quedó guardada. Puedes comenzar a pedir desde el menú:`;\r\n        inlineKeyboard = [\r\n          [{ text: '📋 Explorar Menú', callback_data: 'cmd:menu' }]\r\n        ];\r\n      }\r\n    } else {\r\n      responseMessage = `ℹ️ No entendí ese comando.\\n\\nUsa /menu para ver la carta, /carrito para ver tu pedido o /direccion para configurar tu entrega.`;\r\n      inlineKeyboard = [\r\n        [{ text: '📋 Menú Principal', callback_data: 'cmd:menu' }]\r\n      ];\r\n    }\r\n    break;\r\n\r\n  case 'CLEAR_CART':\r\n    newCartState = [];\r\n    newScreenState = 'MAIN_MENU';\r\n    shouldUpdateSession = true;\r\n    responseMessage = '🗑️ Tu carrito ha sido vaciado.';\r\n    inlineKeyboard = [\r\n      [{ text: '📋 Volver al Menú', callback_data: 'cmd:menu' }]\r\n    ];\r\n    break;\r\n\r\n  case 'CHECKOUT':\r\n    if (currentCart.length === 0) {\r\n      responseMessage = '⚠️ Tu carrito está vacío. Agrega productos para ordenar.';\r\n      inlineKeyboard = [[{ text: '📋 Explorar Menú', callback_data: 'cmd:menu' }]];\r\n    } else if (!currentAddress || currentAddress.trim() === '') {\r\n      // Bloquear checkout si no hay dirección y solicitarla explícitamente\r\n      responseMessage = `📍 *Dirección de Entrega Requerida*\\n\\nPara poder llevar tu pedido a tu estación o domicilio, por favor responde a este mensaje con tu **dirección, oficina o piso**:\\n\\n_(Ejemplo: Piso 3 - Finanzas o Calle 10 #4-20)_`;\r\n      newScreenState = 'AWAITING_ADDRESS';\r\n      shouldUpdateSession = true;\r\n      inlineKeyboard = [\r\n        [{ text: '🔙 Volver al Carrito', callback_data: 'cart:view' }],\r\n        [{ text: '📋 Menú Principal', callback_data: 'cmd:menu' }]\r\n      ];\r\n    } else {\r\n      let stockOk = true;\r\n      let stockErrors = [];\r\n      \r\n      for (const item of currentCart) {\r\n        const prodInMenu = menuRows.find(p => p.id_producto === item.id_producto);\r\n        const availableStock = prodInMenu ? parseInt(prodInMenu.stock || '0', 10) : 0;\r\n        if (availableStock < item.cantidad) {\r\n          stockOk = false;\r\n          stockErrors.push(`• *${item.nombre}*: Solicitas ${item.cantidad}, disponibles: ${availableStock}`);\r\n        }\r\n      }\r\n      \r\n      if (!stockOk) {\r\n        responseMessage = `⚠️ *Stock insuficiente para algunos productos:*\\n\\n${stockErrors.join('\\n')}\\n\\nPor favor ajusta tu carrito.`;\r\n        inlineKeyboard = [\r\n          [{ text: '🛒 Ver Carrito', callback_data: 'cart:view' }],\r\n          [{ text: '🗑️ Vaciar Carrito', callback_data: 'cart:clear' }]\r\n        ];\r\n      } else {\r\n        const now = new Date();\r\n        const idPedido = `PED-${Math.floor(1000 + Math.random() * 9000)}`;\r\n        const fechaStr = now.toISOString().split('T')[0];\r\n        const horaStr = now.toTimeString().split(' ')[0];\r\n        \r\n        let totalPagar = 0;\r\n        let detallesTexto = [];\r\n        \r\n        currentCart.forEach(item => {\r\n          const sub = item.precio * item.cantidad;\r\n          totalPagar += sub;\r\n          detallesTexto.push(`${item.cantidad}x ${item.nombre} ($${sub.toFixed(2)})`);\r\n        });\r\n        \r\n        orderCreated = {\r\n          id_pedido: idPedido,\r\n          id_usuario: userId,\r\n          detalles_pedido: detallesTexto.join(', '),\r\n          total_pago: totalPagar.toFixed(2),\r\n          direccion: currentAddress,\r\n          estado: 'Recibido',\r\n          fecha: fechaStr,\r\n          hora: horaStr\r\n        };\r\n        \r\n        newCartState = [];\r\n        newScreenState = 'MAIN_MENU';\r\n        shouldUpdateSession = true;\r\n        \r\n        responseMessage = `🎉 *¡Tu pedido ha sido recibido con éxito!*\\n\\n🔖 *Código de Orden:* \\`${idPedido}\\`\\n📋 *Detalles:* ${detallesTexto.join(', ')}\\n💰 *Total a pagar:* *$${totalPagar.toFixed(2)}*\\n📍 *Dirección de Entrega:* \\`${currentAddress}\\`\\n📌 *Estado actual:* 🟡 *Recibido (En cola)*\\n\\n👨‍🍳 La cocina ya fue alertada con tu ubicación. Te avisaremos automáticamente cuando empiece la preparación.`;\r\n        \r\n        inlineKeyboard = [\r\n          [{ text: '📍 Consultar Estado', callback_data: 'order:status' }],\r\n          [{ text: '☕ Nuevo Pedido', callback_data: 'cmd:menu' }]\r\n        ];\r\n        \r\n        kitchenAlert = {\r\n          orderId: idPedido,\r\n          customerName: firstName,\r\n          customerId: userId,\r\n          address: currentAddress,\r\n          details: detallesTexto.join('\\n• '),\r\n          total: totalPagar.toFixed(2),\r\n          time: horaStr\r\n        };\r\n      }\r\n    }\r\n    break;\r\n\r\n  case 'CHECK_STATUS':\r\n    const userOrders = orderRows.filter(o => String(o.id_usuario) === String(userId));\r\n    if (userOrders.length === 0) {\r\n      responseMessage = 'ℹ️ No tienes pedidos registrados hasta el momento.';\r\n    } else {\r\n      const lastOrders = userOrders.slice(-3).reverse();\r\n      let ordersText = '';\r\n      lastOrders.forEach(o => {\r\n        let statusIcon = '🟡';\r\n        if (o.estado === 'Preparación') statusIcon = '👨‍🍳';\r\n        if (o.estado === 'En camino') statusIcon = '🛵';\r\n        if (o.estado === 'Entregado') statusIcon = '✅';\r\n        if (o.estado === 'Cancelado') statusIcon = '❌';\r\n        \r\n        const destinoStr = o.direccion ? `📍 *Destino:* \\`${o.direccion}\\`\\n` : '';\r\n        ordersText += `🔖 *Orden:* \\`${o.id_pedido}\\`\\n📅 *Fecha:* ${o.fecha} ${o.hora}\\n📦 *Items:* ${o.detalles_pedido}\\n💰 *Total:* $${parseFloat(o.total_pago).toFixed(2)}\\n${destinoStr}📌 *Estado:* ${statusIcon} *${o.estado}*\\n━━━━━━━━━━━━━━━━━━━\\n`;\r\n      });\r\n      responseMessage = `📍 *Tus últimos pedidos:*\\n\\n${ordersText}`;\r\n    }\r\n    inlineKeyboard = [\r\n      [{ text: '📋 Menú', callback_data: 'cmd:menu' }, { text: '🛒 Carrito', callback_data: 'cart:view' }]\r\n    ];\r\n    break;\r\n\r\n  case 'SHOW_HELP':\r\n  default:\r\n    responseMessage = 'ℹ️ *Comandos de DeliveryBot:*\\n\\n/menu - Ver catálogo\\n/carrito - Ver carrito activo\\n/direccion - Configurar o cambiar dirección de entrega\\n/estado - Consultar avance de pedidos\\n/ayuda - Ver ayuda';\r\n    inlineKeyboard = [\r\n      [\r\n        { text: '📋 Menú Principal', callback_data: 'cmd:menu' },\r\n        { text: '📍 Mi Dirección', callback_data: 'cart:ask_address' }\r\n      ]\r\n    ];\r\n    break;\r\n}\r\n\r\nreturn {\r\n  json: {\r\n    chatId,\r\n    userId,\r\n    responseMessage,\r\n    inlineKeyboard,\r\n    shouldUpdateSession,\r\n    newCartState: JSON.stringify(newCartState),\r\n    newScreenState,\r\n    userAddress: currentAddress,\r\n    orderCreated,\r\n    kitchenAlert\r\n  }\r\n};"
+      },
+      "id": "node-business-logic",
+      "name": "Lógica de Negocio y Carrito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.responseMessage }}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "reply_markup": {
+            "inline_keyboard": "={{ $json.inlineKeyboard }}"
+          }
+        }
+      },
+      "id": "node-send-telegram-client",
+      "name": "Responder a Cliente Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1140,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cliente",
+          "name": "Telegram Client Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.orderCreated !== null }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-if-order-created",
+      "name": "¿Se Creó Pedido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "PEDIDOS",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_pedido": "={{ $json.orderCreated.id_pedido }}",
+            "id_usuario": "={{ $json.orderCreated.id_usuario }}",
+            "detalles_pedido": "={{ $json.orderCreated.detalles_pedido }}",
+            "total_pago": "={{ $json.orderCreated.total_pago }}",
+            "direccion": "={{ $json.orderCreated.direccion }}",
+            "estado": "={{ $json.orderCreated.estado }}",
+            "fecha": "={{ $json.orderCreated.fecha }}",
+            "hora": "={{ $json.orderCreated.hora }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-save-order",
+      "name": "Registrar en PEDIDOS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1360,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_KITCHEN_CHAT_ID }}",
+        "text": "=🔔 *¡NUEVO PEDIDO RECIBIDO EN COCINA!*\n\n🔖 *Orden:* `{{ $json.kitchenAlert.orderId }}`\n👤 *Cliente:* {{ $json.kitchenAlert.customerName }} (`ID: {{ $json.kitchenAlert.customerId }}`)\n📍 *Dirección de Entrega:* {{ $json.kitchenAlert.address }}\n⏰ *Hora:* {{ $json.kitchenAlert.time }}\n💰 *Total:* ${{ $json.kitchenAlert.total }}\n\n📝 *Productos a preparar:*\n• {{ $json.kitchenAlert.details }}\n\n👇 *Actualizar Estado de la Orden:*",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "reply_markup": {
+            "inline_keyboard": "={{ [\n  [\n    { text: '👨‍🍳 En Preparación', callback_data: `status:${$json.kitchenAlert.orderId}:Preparación` },\n    { text: '🛵 En Camino', callback_data: `status:${$json.kitchenAlert.orderId}:En camino` }\n  ],\n  [\n    { text: '✅ Entregado', callback_data: `status:${$json.kitchenAlert.orderId}:Entregado` },\n    { text: '❌ Cancelar', callback_data: `status:${$json.kitchenAlert.orderId}:Cancelado` }\n  ]\n] }}"
+          }
+        }
+      },
+      "id": "node-notify-kitchen-bot",
+      "name": "Alertar a Bot Cocina",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1580,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cocina",
+          "name": "Telegram Kitchen Bot Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger Cliente": {
+      "main": [
+        [
+          {
+            "node": "Router de Acciones Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router de Acciones Cliente": {
+      "main": [
+        [
+          {
+            "node": "Leer Catálogo MENU",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer Sesión Carrito",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer Órdenes PEDIDOS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Catálogo MENU": {
+      "main": [
+        [
+          {
+            "node": "Lógica de Negocio y Carrito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lógica de Negocio y Carrito": {
+      "main": [
+        [
+          {
+            "node": "Responder a Cliente Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Se Creó Pedido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se Creó Pedido?": {
+      "main": [
+        [
+          {
+            "node": "Registrar en PEDIDOS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar en PEDIDOS": {
+      "main": [
+        [
+          {
+            "node": "Alertar a Bot Cocina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

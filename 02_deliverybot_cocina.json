@@ -1,0 +1,214 @@
+{
+  "name": "DeliveryBot - 02 Cocina (Gestión de Estados y Notificaciones)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "callback_query",
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "node-kitchen-trigger",
+      "name": "Telegram Trigger Cocina",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "deliverybot-kitchen-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cocina",
+          "name": "Telegram Kitchen Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\r\nlet callbackData = '';\r\nlet callbackQueryId = null;\r\nlet messageId = null;\r\nlet chatId = null;\r\nlet operatorName = 'Cocina';\r\n\r\nif (item.callback_query) {\r\n  callbackData = item.callback_query.data || '';\r\n  callbackQueryId = item.callback_query.id;\r\n  messageId = item.callback_query.message.message_id;\r\n  chatId = item.callback_query.message.chat.id;\r\n  operatorName = item.callback_query.from.first_name || 'Personal de Cocina';\r\n}\r\n\r\nlet orderId = '';\r\nlet newStatus = '';\r\nlet isValid = false;\r\n\r\nif (callbackData.startsWith('status:')) {\r\n  const parts = callbackData.split(':');\r\n  orderId = parts[1];\r\n  newStatus = parts[2];\r\n  isValid = true;\r\n}\r\n\r\nreturn {\r\n  json: {\r\n    orderId,\r\n    newStatus,\r\n    operatorName,\r\n    chatId,\r\n    messageId,\r\n    callbackQueryId,\r\n    isValid\r\n  }\r\n};"
+      },
+      "id": "node-parse-kitchen-action",
+      "name": "Parsear Acción de Cocina",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-if-valid-kitchen-action",
+      "name": "¿Acción Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "PEDIDOS",
+        "options": {}
+      },
+      "id": "node-read-orders-for-update",
+      "name": "Consultar Pedido en Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        860,
+        240
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const actionData = $('Parsear Acción de Cocina').first().json;\r\nconst allOrders = $('Consultar Pedido en Sheets').all().map(i => i.json);\r\n\r\nconst targetOrder = allOrders.find(o => String(o.id_pedido) === String(actionData.orderId));\r\n\r\nlet clientUserId = targetOrder ? targetOrder.id_usuario : null;\r\nlet orderDetails = targetOrder ? targetOrder.detalles_pedido : 'Sin detalles';\r\nlet total = targetOrder ? targetOrder.total_pago : '0.00';\r\nlet direccion = targetOrder ? (targetOrder.direccion || '') : '';\r\n\r\nlet statusEmoji = 'ℹ️';\r\nlet statusTextForClient = '';\r\n\r\nswitch (actionData.newStatus) {\r\n  case 'Preparación':\r\n    statusEmoji = '👨‍🍳';\r\n    statusTextForClient = 'Tu orden ya está en la cocina siendo preparada con esmero.';\r\n    break;\r\n  case 'En camino':\r\n    statusEmoji = '🛵';\r\n    statusTextForClient = direccion\r\n      ? `Tu pedido va en camino a: *${direccion}*. ¡Espéralo!`\r\n      : 'Tu pedido va en camino a tu departamento/oficina. ¡Espéralo!';\r\n    break;\r\n  case 'Entregado':\r\n    statusEmoji = '✅';\r\n    statusTextForClient = '¡Tu pedido fue entregado! ¡Buen provecho y que lo disfrutes!';\r\n    break;\r\n  case 'Cancelado':\r\n    statusEmoji = '❌';\r\n    statusTextForClient = 'Tu pedido fue cancelado por cocina debido a falta de insumos o cierre.';\r\n    break;\r\n  default:\r\n    statusEmoji = '🔔';\r\n    statusTextForClient = 'Tu pedido cambió de estado a: ' + actionData.newStatus;\r\n}\r\n\r\nconst destinoStr = direccion ? `📍 *Destino:* \\`${direccion}\\`\\n` : '';\r\nconst clientNotificationText = `${statusEmoji} *¡ACTUALIZACIÓN DE PEDIDO!*\\n\\n🔖 *Orden:* \\`${actionData.orderId}\\`\\n📌 *Nuevo Estado:* *${actionData.newStatus}*\\n${destinoStr}💬 ${statusTextForClient}\\n\\n_Cafetería Central - DeliveryBot_`;\r\n\r\nreturn {\r\n  json: {\r\n    orderId: actionData.orderId,\r\n    newStatus: actionData.newStatus,\r\n    clientUserId,\r\n    direccion,\r\n    clientNotificationText,\r\n    chatId: actionData.chatId,\r\n    messageId: actionData.messageId\r\n  }\r\n};"
+      },
+      "id": "node-prepare-status-update",
+      "name": "Preparar Mensajes y Estado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "PEDIDOS",
+        "columnToMatchOn": "id_pedido",
+        "valueToMatchOn": "={{ $json.orderId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "={{ $json.newStatus }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-update-order-sheet",
+      "name": "Actualizar Estado en PEDIDOS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1300,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.clientUserId }}",
+        "text": "={{ $json.clientNotificationText }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "node-push-to-client",
+      "name": "Notificar Push al Cliente (Bot Cliente)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        340
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cliente",
+          "name": "Telegram Client Bot Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger Cocina": {
+      "main": [
+        [
+          {
+            "node": "Parsear Acción de Cocina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Acción de Cocina": {
+      "main": [
+        [
+          {
+            "node": "¿Acción Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Acción Válida?": {
+      "main": [
+        [
+          {
+            "node": "Consultar Pedido en Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Pedido en Sheets": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensajes y Estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensajes y Estado": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado en PEDIDOS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificar Push al Cliente (Bot Cliente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

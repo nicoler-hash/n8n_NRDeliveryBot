@@ -1,0 +1,118 @@
+{
+  "name": "DeliveryBot - 03 Reportes y Business Intelligence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-schedule-daily",
+      "name": "Cron Diario 18:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "PEDIDOS",
+        "options": {}
+      },
+      "id": "node-read-pedidos-report",
+      "name": "Leer Histórico PEDIDOS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        420,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "cred-google-sheets",
+          "name": "Google Sheets Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const orders = $input.all().map(i => i.json);\r\nconst today = new Date().toISOString().split('T')[0];\r\nlet targetDate = today;\r\nlet todaysOrders = orders.filter(o => o.fecha === targetDate);\r\n\r\nif (todaysOrders.length === 0 && orders.length > 0) {\r\n  const dates = orders.map(o => o.fecha).filter(Boolean).sort();\r\n  targetDate = dates[dates.length - 1];\r\n  todaysOrders = orders.filter(o => o.fecha === targetDate);\r\n}\r\n\r\nif (todaysOrders.length === 0) {\r\n  return {\r\n    json: {\r\n      reportMessage: '📊 *Reporte Diario de Ventas*\\n\\nℹ️ No se registraron órdenes en la fecha seleccionada.'\r\n    }\r\n  };\r\n}\r\n\r\nlet totalVentas = 0;\r\nlet ordenesEntregadas = 0;\r\nlet ordenesCanceladas = 0;\r\nlet ordenesEnProceso = 0;\r\nconst productSalesMap = {};\r\nconst hourlyOrdersMap = {};\r\nconst addressOrdersMap = {};\r\n\r\ntodaysOrders.forEach(order => {\r\n  const monto = parseFloat(order.total_pago || '0');\r\n  if (order.estado !== 'Cancelado') {\r\n    totalVentas += monto;\r\n  }\r\n  \r\n  if (order.estado === 'Entregado') ordenesEntregadas++;\r\n  else if (order.estado === 'Cancelado') ordenesCanceladas++;\r\n  else ordenesEnProceso++;\r\n  \r\n  if (order.hora) {\r\n    const hour = order.hora.split(':')[0] + ':00 hrs';\r\n    hourlyOrdersMap[hour] = (hourlyOrdersMap[hour] || 0) + 1;\r\n  }\r\n  \r\n  if (order.direccion && order.estado !== 'Cancelado') {\r\n    const dir = order.direccion.trim();\r\n    addressOrdersMap[dir] = (addressOrdersMap[dir] || 0) + 1;\r\n  }\r\n  \r\n  if (order.detalles_pedido && order.estado !== 'Cancelado') {\r\n    const items = order.detalles_pedido.split(',');\r\n    items.forEach(rawItem => {\r\n      const match = rawItem.trim().match(/^(\\d+)x\\s+(.+?)(?:\\s+\\(\\$[\\d.]+\\))?$/);\r\n      if (match) {\r\n        const qty = parseInt(match[1], 10);\r\n        const name = match[2].trim();\r\n        productSalesMap[name] = (productSalesMap[name] || 0) + qty;\r\n      } else {\r\n        const fallbackName = rawItem.trim();\r\n        productSalesMap[fallbackName] = (productSalesMap[fallbackName] || 0) + 1;\r\n      }\r\n    });\r\n  }\r\n});\r\n\r\nlet productoEstrella = 'N/A';\r\nlet maxCantVendida = 0;\r\nfor (const [prod, cant] of Object.entries(productSalesMap)) {\r\n  if (cant > maxCantVendida) {\r\n    maxCantVendida = cant;\r\n    productoEstrella = prod;\r\n  }\r\n}\r\n\r\nlet horaPico = 'N/A';\r\nlet maxPedidosHora = 0;\r\nfor (const [hour, cant] of Object.entries(hourlyOrdersMap)) {\r\n  if (cant > maxPedidosHora) {\r\n    maxPedidosHora = cant;\r\n    horaPico = hour;\r\n  }\r\n}\r\n\r\nlet puntoTop = 'N/A';\r\nlet maxPedidosPunto = 0;\r\nfor (const [pto, cant] of Object.entries(addressOrdersMap)) {\r\n  if (cant > maxPedidosPunto) {\r\n    maxPedidosPunto = cant;\r\n    puntoTop = pto;\r\n  }\r\n}\r\n\r\nconst totalOrdenesValidas = todaysOrders.length - ordenesCanceladas;\r\nconst ticketPromedio = totalOrdenesValidas > 0 ? (totalVentas / totalOrdenesValidas).toFixed(2) : '0.00';\r\n\r\nconst puntoTopTexto = maxPedidosPunto > 0 \r\n  ? `📍 *PUNTO DE ENTREGA FRECUENTE*\\n• *${puntoTop}* (${maxPedidosPunto} pedidos concentrados)\\n\\n`\r\n  : '';\r\n\r\nconst reportMessage = `📊 *REPORTE GERENCIAL DIARIO DE CAFETERÍA*\\n` +\r\n  `📅 *Fecha Analizada:* \\`${targetDate}\\`\\n\\n` +\r\n  `💰 *MÉTRICAS FINANCIERAS*\\n` +\r\n  `• Recaudación Total: *$${totalVentas.toFixed(2)}*\\n` +\r\n  `• Ticket Promedio: *$${ticketPromedio}*\\n\\n` +\r\n  `📦 *VOLUMEN DE PEDIDOS*\\n` +\r\n  `• Total Recibidos: *${todaysOrders.length} órdenes*\\n` +\r\n  `• ✅ Entregados con Éxito: *${ordenesEntregadas}*\\n` +\r\n  `• ⏳ En Proceso: *${ordenesEnProceso}*\\n` +\r\n  `• ❌ Cancelados: *${ordenesCanceladas}*\\n\\n` +\r\n  `⭐ *PRODUCTO ESTRELLA*\\n` +\r\n  `• *${productoEstrella}* (${maxCantVendida} unidades vendidas)\\n\\n` +\r\n  `⏰ *HORA PICO DE DEMANDA*\\n` +\r\n  `• *${horaPico}* (${maxPedidosHora} pedidos concentrados)\\n\\n` +\r\n  puntoTopTexto +\r\n  `━━━━━━━━━━━━━━━━━━━\\n` +\r\n  `_DeliveryBot Analytics Engine - Automatización n8n_`;\r\n\r\nreturn {\r\n  json: {\r\n    targetDate,\r\n    totalVentas: totalVentas.toFixed(2),\r\n    productoEstrella,\r\n    horaPico,\r\n    puntoTop,\r\n    todaysOrdersCount: todaysOrders.length,\r\n    reportMessage\r\n  }\r\n};"
+      },
+      "id": "node-calc-bi-report",
+      "name": "Cálculo de Métricas y BI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_KITCHEN_CHAT_ID }}",
+        "text": "={{ $json.reportMessage }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "node-send-telegram-report",
+      "name": "Enviar Reporte a Admin/Cocina",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        860,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "cred-telegram-cocina",
+          "name": "Telegram Kitchen Bot Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron Diario 18:00": {
+      "main": [
+        [
+          {
+            "node": "Leer Histórico PEDIDOS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Histórico PEDIDOS": {
+      "main": [
+        [
+          {
+            "node": "Cálculo de Métricas y BI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cálculo de Métricas y BI": {
+      "main": [
+        [
+          {
+            "node": "Enviar Reporte a Admin/Cocina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
