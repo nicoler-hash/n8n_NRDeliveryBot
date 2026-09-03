@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: deliverybot_n8n
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+      - GENERIC_TIMEZONE=America/Bogota
+      - TZ=America/Bogota
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - TELEGRAM_KITCHEN_CHAT_ID=${TELEGRAM_KITCHEN_CHAT_ID}
+      - TELEGRAM_ADMIN_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID}
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./sheets_templates:/sheets_templates:ro
+
+  # Servicio opcional de ngrok en contenedor (si se usa dockerizado)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: deliverybot_ngrok
+    restart: unless-stopped
+    command:
+      - "http"
+      - "n8n:5678"
+      - "--authtoken=${NGROK_AUTHTOKEN}"
+    ports:
+      - "4040:4040"
+    depends_on:
+      - n8n
